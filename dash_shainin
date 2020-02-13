@@ -1,0 +1,247 @@
+import dash
+import base64
+import io
+import dash_core_components as dcc
+import dash_html_components as html
+from dash.dependencies import Input, Output
+from dash.exceptions import PreventUpdate
+import dash_table
+import pandas as pd
+from Shainin import shainin
+
+external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+
+# sets the default document
+
+app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+
+ddf = pd.read_csv("U:\My Documents\Alistair-WE\shainin_simple_test_data.csv")
+
+def equal(x, y):
+    if x == y:
+        return True
+    else:
+        return False
+
+def table(data_source, cols=[]):
+    if isinstance(data_source, pd.DataFrame):
+        df = data_source
+        return dash_table.DataTable(
+            id='table',
+            columns=[
+            {"name": i, "id": i, "selectable": True} for i in df.columns
+            ],
+            data=df.to_dict('records'),
+            column_selectable="multi",
+            selected_columns=cols,
+            )
+    else:
+        df = pd.read_csv(data_source)
+        return dash_table.DataTable(
+            id='table',
+            columns=[
+            {"name": i, "id": i, "selectable": True} for i in df.columns
+            ],
+            data=df.to_dict('records'),
+            column_selectable="multi",
+            selected_columns=cols,
+            )
+
+optn1 = []
+for i in ddf.columns:
+    optn1.append(dict([["label", i], ["value", i]]))
+optn = []
+optn2 = {}
+for i in ddf.columns:
+    optn.append(dict([["label", i]]))
+for i in range(len(optn)):
+    optn2.update(dict([[i, optn[i]["label"]]]))
+
+for_drops = open("csv.txt", "r")
+option = for_drops.read().split("|")
+options = []
+option.pop()
+option.append('''{"label": "new csv file","value":"new"}''')
+for x in option:
+    y = x.replace("{", "").replace("}", "").split(",")
+    y[0] = y[0].replace('''"''', "").split(":")
+    y[1] = y[1].replace('''"''', "").split(":")
+    options.append(dict(y))
+for_drops.close()
+
+app.layout = html.Div(children=[
+    html.H1(children="Shainin algorithm"),
+    html.Div(children=[
+        dcc.Dropdown(
+                id="dropdown",
+                options=options,
+                value="shainin_simple_test_data.csv",
+                placeholder="select a document"
+                ),
+                
+        dcc.Upload(
+                accept=".csv",
+            disabled=True,
+            id='upload',
+            children=html.Div([
+                'Drag and Drop or ',
+                html.A('Select Files')]),
+            style={
+            'width': '100%',
+            'height': '60px',
+            'lineHeight': '60px',
+            'borderWidth': '1px',
+            'borderStyle': 'dashed',
+            'borderRadius': '5px',
+            'textAlign': 'center',
+            'margin': '10px'
+            },
+        multiple=True
+        ),
+    ]),
+    html.Div(children=[
+        html.Div(children=[
+                html.Div(children=[html.Button("Process", id="button")], id="btn"),
+                dcc.Dropdown(
+                        id="target picker",
+                        options=optn1,
+                        placeholder="select target"),
+                # add dropbox to pick target, and range picker
+        ]),
+        html.Div(id="select container", children=[html.Button("Select all",id="Select")]),
+        html.Div(id="reset container", children=[html.Button("Reset all",id="Reset")]),
+        dcc.Loading(id="load", children=[html.Div(id="table container", children=[table(ddf)])], type="cube"),
+        html.Div(id="store", children=[html.Div(id="store2")], hidden=True),
+        html.Div(id="hidden calc"),# hidden=True),
+        html.Div(id="hidden data"),# hidden=True)
+    ])
+])
+
+
+# callback that changes the input box to active when you need it
+    
+@app.callback(
+        Output("upload", "disabled"),
+        [Input("dropdown", "value"), Input("load", "loading_state")],)
+def activate(vals, load):
+    if load is None:
+        if vals == "new":
+            print("false")
+            return False
+        else:
+            return True
+
+# callback to change the table based on what you want doing
+        
+@app.callback(
+        Output("table container", "children"),
+        [Input("hidden calc", "children"), Input("button", "n_clicks"), Input("table", "data")],)
+def tabl(calc, btn, tbl):
+    if btn != 1:# and calc is not None:
+        print(calc)
+        if not equal(pd.read_csv(calc).to_dict("records"), tbl):
+            df = pd.read_csv(calc)
+            return dash_table.DataTable(
+            id='table',
+            columns=[
+            {"name": i, "id": i, "selectable": True} for i in df.columns
+            ],
+            data=df.to_dict('records'),
+            column_selectable="multi",
+            selected_columns=[],
+            )
+
+
+    else:
+        raise PreventUpdate()
+
+
+@app.callback(
+        Output("hidden calc", "children"),
+        [Input("dropdown", "value"), Input("upload", "contents"), Input("upload", "filename")])
+def get_new(drop, contents, filename):
+    if drop != "new":
+        pass
+        return drop
+    
+    if (contents is not None) and (drop == "new"):
+        content_type, content_string = contents[0].split(',')
+        decoded = base64.b64decode(content_string)
+        df = pd.read_csv(
+               io.StringIO(decoded.decode('utf-8')))
+        saved_r = open("csv.txt", "r")
+        x = saved_r.read()
+        x = x.split("|")
+        y = []
+        z = []
+        a = []
+        for i in x:
+            y.append(i.replace("{", "").replace("}", "").split(","))
+        for j in range(len(y)):
+            for i in y[j]:
+                z.append(i.split(":"))
+        for i in range(len(z)):
+            for j in z[i]:
+                a.append(j)
+        if filename[0] in a:
+            saved_r.close()
+            print(df.to_dict())
+            return filename
+        else:
+            saved_r.close()
+            saved_a = open("csv.txt", "a+")
+            saved_a.write('''{label:'''+filename[0]+''',value:'''+filename[0]+'''}|''')
+            saved_a.close()
+            df.to_csv(filename[0], index=False)
+            return filename
+
+# callback to update the targets list
+    
+@app.callback(
+        Output("target picker", "options"),
+        [Input("dropdown", "value"), Input("load", "loading_state")],)
+def update_targets(csv, load):
+    if load is None:
+        try:
+            df = pd.read_csv(csv)
+            optn = []
+            for i in df.columns:
+                optn.append(dict([["label", i], ["value", i]]))
+            print(optn)
+            # return optn
+        except:
+            pass
+        
+#callback to reset the select and reset buttons
+        
+@app.callback(
+        Output("select container", "children"),
+        [Input("Select", "n_clicks"), Input("Reset", "n_clicks"), Input("load", "loading_state")])
+def buttn(clicks, reset, load):
+    if load is None:
+        if clicks == 1:
+            return html.Button("Select all", id="Select")
+        else:
+            return html.Button("Select all", id="Select")
+   
+@app.callback(
+        Output("reset container", "children"),
+        [Input("Reset", "n_clicks"), Input("load", "loading_state")])
+def buttn2(clicks, load):
+    if load is None:
+        if clicks == 1:
+            return html.Button("Reset all", id="Reset")
+        else:
+            return html.Button("Reset all", id="Reset")        
+    
+# callback to save currently selected lists to a hidden div
+        
+#@app.callback(
+#        Output("store", "children"),
+#        [Input("store2", "children"), Input("table", "data"), Input("load", "loading_state")],)
+#def hidden(val, data, load):
+#    if load is None:
+#        return html.Div(id="store2", children=[str(pd.DataFrame(data=data).columns)])
+
+if __name__ == '__main__':
+    app.run_server(debug=True)
