@@ -1,0 +1,162 @@
+import pandas as pd
+import numpy as np
+
+d = {}
+
+class type:
+    good = 0
+    bad = 1
+   
+def shainin(csv_file, inc=[], swap=False, target="Target"):
+    doc = pd.read_csv(csv_file)._get_numeric_data()
+    d = {"SSV":["count", "good upper", "good lower", "bad upper", "bad lower"]}
+    
+    # Removing columns with more than 20% of columns missing, then deleting all
+    # rows with missing data
+    
+    for i in doc.columns:
+        y = 0
+        SSV = eval("doc."+str(i))
+        for j in range(len(SSV)):
+            if np.isnan(SSV[j]):
+                y += 1
+        if y/(j + 1) >= 0.2:
+            doc.drop(columns=i, inplace=True)
+    doc.dropna(inplace=True)
+    doc.reset_index(inplace=True)
+    
+    #determining how many and which to run
+    if inc != []:
+        for i in inc:
+            #try:
+            print("doc."+str(i))
+            d[i] = run(eval("doc."+str(i)), swap, doc)
+            #except:
+            #    pass
+
+    else:
+        for i in doc.columns:
+            if i != "index" and i.lower() not in (target, "target"):
+                if sum(run(eval("doc."+str(i)), swap, doc)) != 0:
+                    d[i] = run(eval("doc."+str(i)), swap, doc)
+    #creating and outputting the df
+    
+    df = pd.DataFrame(data=d)
+    return df
+    
+def run(SSV, swap, doc):
+    SSVl = []
+    targets = []
+    data = []
+    sigData = []
+    
+    # converting series into list
+    
+    for i in SSV:
+        SSVl.append(i)
+    
+    for i in doc.Target:
+        targets.append(i)
+        
+    # compiling to 2d array
+    
+    for i in range(len(SSVl)):
+        data.append((SSVl[i], targets[i]))
+
+    
+    # searching for the 8 BOB and 8 WOW
+    
+    BOB = []
+    WOW = []
+    smallest = 0
+    start = True
+    for i in targets:
+        if len(BOB) < 8 and start:
+            BOB.append(i)
+        elif i not in BOB:
+            start = False
+            if smallest not in BOB:
+                for j in BOB:
+                    if smallest not in BOB or j < smallest:
+                        smallest = j
+            if i > smallest:
+                BOB.pop(BOB.index(smallest))
+                BOB.append(i)
+    biggest = BOB[0]
+    start = True
+    for i in targets:
+        if len(WOW) < 8 and start:
+            WOW.append(i)
+        elif i not in WOW:
+            start = False
+            if biggest not in WOW:
+                for j in WOW:
+                    if biggest not in WOW or j > biggest:
+                        biggest = j
+            if i < biggest:
+                WOW.pop(WOW.index(biggest))
+                WOW.append(i)
+              
+    # swapping the BoB and WoW if the user wants the best to be lower
+    if swap:
+        temp = BOB
+        BOB = WOW
+        WOW = temp
+    
+    # put in order based on function input, defaulting to acc
+
+    for _ in range(len(data)):
+        for i in range(len(data) - 1):
+            if data[i][0] > data[i + 1][0]:
+                temp = data[i]
+                data[i] = data[i + 1]
+                data[i + 1] = temp
+    
+    # checking if the target value is in BOB or WOW or in sigData
+
+    for i in range(len(data)):
+        if data[i][1] in BOB:
+            sigData.append((data[i][0], data[i][1], type.good))
+            BOB.pop(BOB.index(data[i][1]))
+        elif data[i][1] in WOW:
+            sigData.append((data[i][0], data[i][1], type.bad))
+            WOW.pop(WOW.index(data[i][1]))  
+    
+    # order the significant data
+
+    for _ in range(len(sigData)):
+        for i in range(len(sigData) - 1):
+            if sigData[i][0] > sigData[i + 1][0]:
+                temp = sigData[i]
+                sigData[i] = sigData[i + 1]
+                sigData[i + 1] = temp
+    # Calculating the bands
+    
+    count = 0
+    LBBand = 0
+    UBBand = 0
+    LGBand = 0
+    UGBand = 0
+    if sigData[0][2] != sigData[-1][2]:
+            LBBand = sigData[0][0]
+            UGBand = sigData[-1][0]
+            for i in range(len(sigData) - 1):
+                count += 1
+                if sigData[i][2] != sigData[i + 1][2]:
+                    UBBand = sigData[i][0]
+                    break
+            for i in range(len(sigData) - 1):
+                count += 1
+                x = len(sigData) - 1 - i
+                if sigData[x][2] != sigData[x - 1][2]:
+                    LGBand = sigData[x][0]
+                    break
+    # checking if the last values are the same
+    pass            
+            
+    # outputting the data to the df
+    return [count, UGBand, LGBand, UBBand, LBBand]
+        
+if __name__ == "__main__":
+    print(shainin("test2.csv", inc=["SSV31"]))
+    
